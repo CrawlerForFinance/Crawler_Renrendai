@@ -23,27 +23,7 @@ proxy_enable = 0
 proxy_host = ''
 proxy_port = ''
 
-'''
-#For login
-urlLogin = 'https://www.renrendai.com/j_spring_security_check'
-urlIndex = 'http://www.renrendai.com/'
-urlLenderRecordsPrefix = 'http://www.renrendai.com/lend/getborrowerandlenderinfo.action?id=lenderRecords&loanId='
-urlRepayDetailPrefix = 'http://www.renrendai.com/lend/getborrowerandlenderinfo.action?id=repayDetail&loanId='
-urlLenderInfoPrefix = 'http://www.renrendai.com/lend/getborrowerandlenderinfo.action?id=lenderInfo&loanId='
-urlTransferLogPrefix = 'http://www.renrendai.com/transfer/transactionList.action?loanId='
-urlUserPrefix = 'https://www.renrendai.com/account/myInfo.action?userId='
-urlCommentPrefix = 'http://www.renrendai.com/lend/loanCommentList.action?loanId='
-urlCollectionPrefix = 'http://www.renrendai.com/lend/dunDetail.action?loanId='
 
-#for Financial Plan
-urlFPLenderPrefix = 'http://www.renrendai.com/financeplan/getFinancePlanLenders.action?financePlanStr='
-urlFPPerformancePrefix = 'http://www.renrendai.com/financeplan/listPlan!planResults.action?financePlanId='
-urlFPReservePrefix = 'http://www.renrendai.com/financeplan/getFinancePlanLenders!reserveRecord.action?financePlanStr='
-
-#for salary plan AutoinvestPlan
-urlSPBuyerPrefix = 'http://www.renrendai.com/autoinvestplan/listPlan!getAutoInvestPlanBuyerRecords.action?autoInvestPlanId='
-urlSPPerformancePrefix = 'http://www.renrendai.com/autoinvestplan/listPlan!planResults.action?autoInvestPlanId='
-'''
 #For login
 urlLogin = 'https://www.we.com/j_spring_security_check'
 urlIndex = 'http://www.we.com/'
@@ -414,6 +394,7 @@ def analyzeData(webcontent, writers):
     
     ### 分析script ###
     jsonString = soup.find(id = 'credit-info-data').get_text()
+    
     '''
     try:
         jsonString = soup.find(id = 'credit-info-data').get_text()
@@ -482,7 +463,7 @@ def analyzeData(webcontent, writers):
     else:
         username = ''
     borrowerLevel = loanData['borrowerLevel']
-    leftMonths = loanData['leftMonths'] #剩余期数（月）
+    
     finishedRatio = loanData['finishedRatio'] #完成额度
     if loanData['description']:
         description = '"'+loanData['description']+'"'
@@ -518,9 +499,13 @@ def analyzeData(webcontent, writers):
         closeTime = str2Datetime(closeTimeStr, originTimeFormat)
     
     status = ''
-   
+    # update at 2016-6-18 by lyq:增加剩余期数
+    debtAccount = ''
+    debtTime = ''
+    leftMonths = ''
     if statusType == '"IN_PROGRESS"':
         status = '"'+'还款中'+'"'
+        leftMonths = loanData['leftMonths'] #剩余期数（月）
     elif statusType == '"FIRST_READY"':
         status = '"'+'已满标'+'"'
     elif statusType == '"FIRST_APPLY"':
@@ -529,11 +514,20 @@ def analyzeData(webcontent, writers):
         status = '"'+'已流标'+'"'
     elif statusType == '"BAD_DEBT"':
         status = '"'+'已垫付'+'"'
+        debtAccount = soup.find(class_='loan-baddebt').find('span').find('i').get_text()
+        if debtAccount:
+            debtAccount = debtAccount.replace(',', '')
+            debtAccount = float(debtAccount);
+        debtTime = loanData['repaidByGuarantorTime']
+        debtTime = str2Datetime(debtTime, originTimeFormat)
     elif statusType == '"CLOSED"':
         status = '"'+'已还清'+'"'
     else:
         status = '"'+statusType+'"'
-    buffer1 = [currentTime, loanId, loanType, guarantor, title, amount, interest, months, openTime, beginBidTime, readyTime, passTime, startTime, closeTime, status]
+    
+    
+    
+    buffer1 = [currentTime, loanId, loanType, guarantor, title, amount, interest, months, openTime, beginBidTime, readyTime, passTime, startTime, closeTime, status,debtAccount,debtTime,leftMonths]
     #print(buffer1)
 
     #soup = soup.find('body') #只从body中提取数据，出现了莫名截断的问题
@@ -585,6 +579,8 @@ def analyzeData(webcontent, writers):
     #tag_userinfo = soup.find('table', class_='ui-table-basic-list')#ui-table-basic-list
     tag_userinfo = soup.find('div', {'class':'ui-tab-content-basic'})#ui-tab-content-info
     
+    #2015-5-7 by lyq: 网页抓取的数据十分奇怪，采取特殊解决方法
+    content_exception = soup.findAll('tr')
     #2015-11-1 by lyq: 网页结构变化，由list变成了table
     list_td = tag_userinfo.find('table').find_all('td')
     
@@ -616,19 +612,29 @@ def analyzeData(webcontent, writers):
     companyScale = list_td[24].em.get_text()#公司规模
     if companyScale == '--': companyScale = ''
     else:
-        companyScale = companyScale.replace('人', '')
-    '''
-    city = list_td[25].em.get_text()#工作城市
+        companyScale = '"'+companyScale+'"'
+     
+    position = list_td[25].em.get_text()#岗位职位
+    if position == '--': position = ''
+    else:
+        position = '"'+position+'"'
+    
+    list_exception = content_exception[-1].find_all('td')
+
+    city = list_exception[0].em.get_text()#工作城市
     if city.find('请选择')>=0 or city.find('--')>=0: 
         city = ''
-    workTime = list_td[26].em.get_text()#工作时间
+    else:
+        city = '"'+city+'"'
+    workTime = list_exception[1].em.get_text()#工作时间
     if workTime=='--': workTime = ''
-    position = list_td[27].em.get_text()#岗位职位
-    if position == '--': position = ''
-   '''
-    city = ''
-    workTime = ''
-    position = '' #目前这三个数据挖不倒
+    else:
+        workTime = '"'+workTime+'"'
+    
+   
+    #city = ''
+    #workTime = ''
+    #position = '' #目前这三个数据挖不倒
     
     userinfo = [userId, username.encode('gbk', 'ignore').decode('gbk'), age, education, marriage, company, companyScale, position,city, workTime, incomeRange, house, houseLoan, car, carLoan, jobType]
     buffer1.extend(userinfo)
@@ -645,16 +651,21 @@ def analyzeData(webcontent, writers):
         loanTimes = ''.join(filter(str.isdigit, str(loanTimes.strip()))) #提取数字
     creditLine = list_td[8].em.get_text()#信用额度
     if creditLine:
-        creditLine = creditLine.replace('元','')
+        #creditLine = creditLine.replace('元','')
+        creditLine = creditLine.replace('元','').replace(',','')
+        creditLine = float(creditLine)
     overdueAmount = list_td[9].em.get_text()#逾期金额
     if overdueAmount:
-        overdueAmount = overdueAmount.replace('元','')
+        overdueAmount = overdueAmount.replace('元','').replace(',','')
+        overdueAmount = float(overdueAmount)
     loanSuccessTimes = list_td[10].em.get_text()#成功借款
     if loanSuccessTimes:
         loanSuccessTimes = ''.join(filter(str.isdigit, str(loanSuccessTimes.strip()))) #提取数字
     loanTotalAmount = list_td[11].em.get_text()#借款总额
     if loanTotalAmount:
-        loanTotalAmount = ''.join(filter(str.isdigit, str(loanTotalAmount.strip()))) #提取数字
+        #loanTotalAmount = ''.join(filter(str.isdigit, str(loanTotalAmount.strip()))) #提取数字
+        loanTotalAmount = loanTotalAmount.replace('元','').replace(',','')
+        loanTotalAmount = float(loanTotalAmount)
     overdueTimes = list_td[12].em.get_text()#逾期次数
     if overdueTimes:
         overdueTimes = ''.join(filter(str.isdigit, str(overdueTimes.strip()))) #提取数字
@@ -664,7 +675,8 @@ def analyzeData(webcontent, writers):
         payoffTimes = ''.join(filter(str.isdigit, str(payoffTimes.strip())))
     torepayAmount = list_td[14].em.get_text()#待还本息
     if torepayAmount:
-        torepayAmount = torepayAmount.replace('元','')
+        torepayAmount = torepayAmount.replace('元','').replace(',','')
+        torepayAmount = float(torepayAmount)
     seriousOverdueTimes = list_td[15].em.get_text()#严重逾期
     if seriousOverdueTimes:
         seriousOverdueTimes = seriousOverdueTimes.replace('笔','')
@@ -809,6 +821,7 @@ def analyzeLenderData(loanId, writer, attrs):
         lendTime = str2Datetime(item['lendTime'], '%Y-%m-%dT%H:%M:%S')
         lenderType = '"无"' #投标类型：理、自、U、无
         financePlanId = '' #理财计划期数或U计划类型
+        '''
         if(item['lenderType'] == 'FINANCEPLAN_BID'):#FINANCEPLAN_BID or NORMAL_BID or AUTO_BID
             financePlanId = item['financeCategory']
             lenderType = '"U"'
@@ -817,7 +830,17 @@ def analyzeLenderData(loanId, writer, attrs):
                 lenderType = '"理"'
         elif(item['lenderType'] == 'AUTO_BID'):
             lenderType = '"自"'
-            
+        '''
+        # update at 2016-6-18 by lyq: plan id 改为具体数值
+        if(item['lenderType'] == 'FINANCEPLAN_BID'):#FINANCEPLAN_BID or NORMAL_BID or AUTO_BID
+            financePlanId = item['financePlanId']
+            financeCategory = item['financeCategory']
+            lenderType = '"U"'
+            if financeCategory == 'OLD':
+                lenderType = '"理"'
+        elif(item['lenderType'] == 'AUTO_BID'):
+            lenderType = '"自"'
+        # end of update       
         mobileTrade = '0'
         if(item['tradeMethod'] == 'MOBILE'):
             mobileTrade = '1'
@@ -931,13 +954,21 @@ def analyzeLenderInfoData(loanId, writer, attrs):
     for item in list_lenderInfo:
         lenderType = '"无"' #投标类型：理、U、无
         financePlanId = '' #理财计划期数或U计划类型
+        '''
         if(item['financePlanId'] != None):
             financePlanId = item['financePlanCategory']
             lenderType = '"U"'
             if financePlanId == 'OLD':
                 financePlanId = item['financePlanId']
                 lenderType = '"理"'
-        
+        '''
+        #update at 2016-6-18 by lyq：planId变成具体d理财期数
+        if(item['financePlanId']!= None):
+            financePlanId = item['financePlanId']
+            lenderType = '"U"'
+            if lenderType == 'OLD':
+                lenderType = '"理"'
+        #end of update    
         if item['nickName']:
             username = '"'+item['nickName'].encode('gbk', 'ignore').decode('gbk')+'"'
         else:
@@ -991,7 +1022,7 @@ def analyzeTransferData(loanId, writer, attrs):
             fromnickname = ''
         buffer_transferLog = []
         buffer_transferLog.extend(attrs)
-        buffer_transferLog.extend([loanId, username, item['toNickName'], fromnickname, item['fromNickName'], item['fromFinancePlanId'], item['price'], item['share'], transferTime])
+        buffer_transferLog.extend([loanId, username, item['toNickName'], item['financePlanId'],fromnickname, item['fromNickName'], item['fromFinancePlanId'], item['price'], item['share'], transferTime])
         
         for index, item in enumerate(buffer_transferLog):
             if(isinstance(item, str)):
@@ -1152,9 +1183,12 @@ def analyzeUPData(webcontent, planId, writers):
     planStep3 = planDetails.find('div', class_='step-three')
     lockStart = planStep3.find('p').get_text()
     if lockStart:
-        lockStart = re.match('进入理财期(.*)', lockStart).group(1)
-        if lockStart:
-            lockStart = str2Datetime(lockStart, '%m月%d日 %H:%M', '%m/%d %H:%M')
+        #lockStart = re.match('进入理财期(.*)', lockStart).group(1)
+        lockStartMatch = re.match('进入理财期(.*)', lockStart)
+        if lockStartMatch:
+            lockStart = lockStartMatch.group(1)
+            if lockStart:
+                lockStart = str2Datetime(lockStart, '%m月%d日 %H:%M', '%m/%d %H:%M')
     
     '''
     list_basicInfo = tag_basic.ul.find_all('li', class_='fn-clear')
